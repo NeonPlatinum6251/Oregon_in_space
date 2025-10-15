@@ -3,10 +3,14 @@ import time
 import os
 
 distance = 0
-food = 300
+food = 3000
 aliens = 30
 speed = 1
-distance = 0
+
+#Todo write a function that makes a default menu box that all menu function calls when they are created 
+#write it in rust you pussy
+
+
 
 class Ships:
     def __init__(self,capacity,maxspeed,name):
@@ -77,7 +81,7 @@ def updatedistance(speed,distance):
 def buymenu(myship):
     os.system('clear')
     print("")
-
+#i should make it like cookie clicker for now i reckon and also do it in rust 
 def playgame(speed,food,aliens,distance):
     width, height = get_terminal_size()
     screen = [[' ' for _ in range(width)] for _ in range(height)]
