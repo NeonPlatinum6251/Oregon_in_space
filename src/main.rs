@@ -1,8 +1,45 @@
 use rand::Rng;
 use term_size;
-use clearscreen;
-use std::{thread, time};
+use std::thread;
+use std::time::Duration;
+use crossterm::event::{poll,read,Event,KeyCode};
+use crossterm::terminal::{enable_raw_mode, disable_raw_mode};
+use std::io::{stdout, Write};
+use crossterm::{
+    execute,
+    cursor::MoveTo,
+    terminal::{Clear, ClearType},
+};
 
+struct Game {
+    distance:u64,
+    food:u64,
+    aliens:u64,
+    money:u64,
+}
+impl Game {
+    fn tick(&mut self) {
+        self.distance += 1;
+        if self.food <= self.aliens {
+            self.aliens -= 1;
+            self.food = 0  
+        } else {
+            self.food -= self.aliens;
+        }
+
+    }
+    fn add_money(&mut self) {
+        self.money += 1
+    }
+
+    fn buy_food(&mut self) {
+        if self.money > 15 {
+            self.money -= 15;
+            self.food += 50;
+        }
+
+    }
+}
 
 fn get_terminal_size() -> (usize, usize) {
     if let Some((w, h)) = term_size::dimensions() {
@@ -56,56 +93,94 @@ fn init_screen(screen: &mut Vec<char>, width: usize, height: usize) {
             screen[l+k*width] = get_star()
         }
     }
+}
 
-    draw_ship(screen, width, height);
-    
-    for (i, c) in screen.iter().enumerate() {
-        if i%width == 0 {
-            println!("");
+fn update_star_field(screen: &mut Vec<char>, width: usize, height: usize) {
+    for row in 0..height {
+        for col in 0..(width - 1) {
+            let idx = row * width + col;
+            if screen[idx] == '*' || screen[idx] == ' ' {
+                screen[idx] = screen[idx + 1];
+            }
         }
-        print!("{}", c);
+        screen[row * width + (width - 1)] = get_star();
     }
 }
 
-fn update_screen(screen: &mut Vec<char>,width: usize, height: usize,distance:u64,food:u64,aliens:u64) {
-    clearscreen::clear().expect("failed to clear screen");
-    for i in 0..height {
-        screen.remove(i*width);
-        screen.insert((i+1)*width -1, get_star());
-    }
-    draw_ship(screen, width, height);
-    
-    for (i, c) in screen.iter().enumerate() {
-        if i%width == 0 {
-            println!("");
+fn render(screen: &Vec<char>, width: usize, height: usize, game: &Game) {
+    let mut stdout = stdout();
+    execute!(stdout, MoveTo(0, 0), Clear(ClearType::All)).unwrap();
+
+    for row in 0..height - 5 { 
+        for col in 0..width {
+            print!("{}", screen[row * width + col]);
         }
-        print!("{}", c);
+        print!("\r\n");
     }
-    make_taskbar(width, distance, food, aliens);
+    let taskbar_start = height.saturating_sub(5);
+    execute!(stdout, MoveTo(0, taskbar_start as u16)).unwrap();
+    let line = "_".repeat(width.saturating_sub(2));
+    println!("{}", line);
+    println!("| food: {}  | distance: {}  | aliens: {}  | money: {}", game.food, game.distance, game.aliens,game.money);
+    println!("{}", line);
+
+    stdout.flush().unwrap();
 }
 
-fn make_taskbar(width:usize,distance:u64,food:u64,aliens:u64) {
-    let topandbottom: String = "_".repeat(width-2);
-    println!("{}\n| food: {}\n|distance: {}\n|aliens: {}\n {}",topandbottom,food,distance,aliens,topandbottom)
-    } 
 
+fn handle_input() -> Option<KeyCode> {
+    if poll(Duration::from_millis(0)).unwrap() {
+        if let Event::Key(event) = read().unwrap() {
+            return Some(event.code);
+        }
+    }
+    None
+}
 
 fn main() {
+    enable_raw_mode().unwrap();
     let (w, h) = get_terminal_size();
     let width = w;
     let height = h;
-    let mut distance :u64 = 0;
-    let mut food :u64 = 0; 
-    let mut aliens :u64 = 0;
-    let mut speed :u64 = 1;
+
+    let mut the_game:Game = Game {
+            distance: 0,
+            food: 10000,
+            aliens:10,
+            money:0,
+        };
     
     if width == 0 || height == 0 {
         eprintln!("Terminal size returned zero dimension: {:?}x{:?}", width, height);
         return;
     }
 
-    let mut screen = vec![' '; width*height];
-
+     let mut screen = vec![' '; width * height];
     init_screen(&mut screen, width, height);
-    make_taskbar(width, distance, food, aliens);
+    draw_ship(&mut screen, width, height);
+
+    // Game loop
+    while the_game.aliens != 0 {
+        // Handle input
+        if let Some(key) = handle_input() {
+            match key {
+                KeyCode::Char('q') => break,
+                KeyCode::Char('f') => {
+                    if the_game.food > 0 { the_game.food -= 1; }
+                }
+                KeyCode::Char('h') => the_game.add_money(),
+                KeyCode::Char('b') => the_game.buy_food(),
+                _ => {}
+            }
+        }
+
+        // Update
+        update_star_field(&mut screen, width, height);
+        draw_ship(&mut screen, width, height);
+        render(&screen, width, height, &the_game);
+        the_game.tick();
+
+        thread::sleep(Duration::from_millis(100));
+    }
+    disable_raw_mode().unwrap();
 }
