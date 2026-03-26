@@ -11,12 +11,22 @@ use crossterm::{
     terminal::{Clear, ClearType},
 };
 
+/*TODO:  
+Add Random events 
+Aliens should multiply -> 
+this should be what makes the game harder as more food is required */
 struct Game {
     distance:u64,
     food:u64,
     aliens:u64,
     money:u64,
 }
+enum RandEvent {
+    Sickness(bool),
+    NoEvent(bool),
+    MeteorShower(bool),
+}
+
 impl Game {
     fn tick(&mut self) {
         self.distance += 1;
@@ -27,15 +37,23 @@ impl Game {
             self.food -= self.aliens;
         }
 
+        let mut rng = rand::rng();
+        let birth_chance = self.aliens/2;
+        for n in 1..birth_chance {
+            if rng.random_range(0..100) == 2 {
+                self.aliens +=1
+            }
+        }
     }
+    //below are the key functions 
     fn add_money(&mut self) {
         self.money += 1
     }
 
     fn buy_food(&mut self) {
-        if self.money > 15 {
-            self.money -= 15;
-            self.food += 50;
+        if self.money > 5 {
+            self.money -= 5;
+            self.food += 100;
         }
 
     }
@@ -120,9 +138,11 @@ fn render(screen: &Vec<char>, width: usize, height: usize, game: &Game) {
     let taskbar_start = height.saturating_sub(5);
     execute!(stdout, MoveTo(0, taskbar_start as u16)).unwrap();
     let line = "_".repeat(width.saturating_sub(2));
-    println!("{}", line);
+    println!("┌{}", line);
+    execute!(stdout,MoveTo(0,(taskbar_start as u16)+1)).unwrap();
     println!("| food: {}  | distance: {}  | aliens: {}  | money: {}", game.food, game.distance, game.aliens,game.money);
-    println!("{}", line);
+    execute!(stdout,MoveTo(0,(taskbar_start as u16)+2)).unwrap();
+    println!("└	{}", line);
 
     stdout.flush().unwrap();
 }
@@ -142,10 +162,9 @@ fn main() {
     let (w, h) = get_terminal_size();
     let width = w;
     let height = h;
-
     let mut the_game:Game = Game {
             distance: 0,
-            food: 10000,
+            food: 1000,
             aliens:10,
             money:0,
         };
@@ -155,13 +174,11 @@ fn main() {
         return;
     }
 
-     let mut screen = vec![' '; width * height];
+     let mut screen: Vec<char> = vec![' '; width * height];
     init_screen(&mut screen, width, height);
     draw_ship(&mut screen, width, height);
 
-    // Game loop
     while the_game.aliens != 0 {
-        // Handle input
         if let Some(key) = handle_input() {
             match key {
                 KeyCode::Char('q') => break,
@@ -174,13 +191,12 @@ fn main() {
             }
         }
 
-        // Update
         update_star_field(&mut screen, width, height);
         draw_ship(&mut screen, width, height);
         render(&screen, width, height, &the_game);
         the_game.tick();
 
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(300));
     }
     disable_raw_mode().unwrap();
 }
